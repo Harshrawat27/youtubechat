@@ -22,6 +22,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [transcriptionStatus, setTranscriptionStatus] =
     useState<TranscriptionStatus>('not_started');
+  const [transcriptionProgress, setTranscriptionProgress] = useState(0);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
@@ -41,6 +42,9 @@ export default function ChatPage() {
         const statusData = await statusResponse.json();
 
         setTranscriptionStatus(statusData.status);
+        if (statusData.progress) {
+          setTranscriptionProgress(statusData.progress);
+        }
 
         // If transcription not started or in progress, trigger it
         if (statusData.status !== 'completed') {
@@ -86,6 +90,9 @@ export default function ChatPage() {
         const data = await response.json();
 
         setTranscriptionStatus(data.status);
+        if (data.progress !== undefined) {
+          setTranscriptionProgress(data.progress);
+        }
 
         // If completed, stop polling
         if (data.status === 'completed' && pollingInterval) {
@@ -99,6 +106,10 @@ export default function ChatPage() {
 
     // Start polling if transcription is in progress and we're not already polling
     if (transcriptionStatus === 'in_progress' && !pollingInterval) {
+      // Initial poll
+      pollTranscriptionStatus();
+
+      // Set up regular polling
       const interval = setInterval(pollTranscriptionStatus, 3000); // Poll every 3 seconds
       setPollingInterval(interval);
     }
@@ -134,7 +145,7 @@ export default function ChatPage() {
           <ChatInterface videoId={videoId} />
         ) : (
           <div className='flex items-center justify-center h-full p-6'>
-            <TranscriptionLoader />
+            <TranscriptionLoader progress={transcriptionProgress} />
           </div>
         )}
       </div>
