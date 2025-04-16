@@ -1,10 +1,4 @@
 import OpenAI from 'openai';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
-import { createWriteStream } from 'fs';
-import { pipeline } from 'stream/promises';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -19,181 +13,6 @@ interface Timestamp {
 interface ProcessQueryResult {
   text: string;
   timestamps: Timestamp[];
-}
-
-// Interface for Whisper API response
-interface WhisperSegment {
-  id: number;
-  seek: number;
-  start: number;
-  end: number;
-  text: string;
-  tokens: number[];
-  temperature: number;
-  avg_logprob: number;
-  compression_ratio: number;
-  no_speech_prob: number;
-}
-
-interface WhisperResponse {
-  task: string;
-  language: string;
-  duration: number;
-  text: string;
-  segments: WhisperSegment[];
-}
-
-/**
- * Download YouTube video audio and transcribe with Whisper for precise timestamps
- */
-export async function getAccurateTranscript(videoId: string): Promise<any> {
-  // Define file paths
-  const tempDir = path.join(process.cwd(), 'tmp');
-  const videoPath = path.join(tempDir, `${videoId}.mp4`);
-  const audioPath = path.join(tempDir, `${videoId}.mp3`);
-
-  try {
-    // Create temp directory if it doesn't exist
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    // Download video using yt-dlp (more reliable than ytdl-core)
-    await downloadVideo(videoId, videoPath);
-
-    // Extract audio from video
-    await extractAudio(videoPath, audioPath);
-
-    // Transcribe with Whisper
-    const segments = await transcribeAudio(audioPath);
-
-    // Clean up temp files
-    try {
-      if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-      if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-    } catch (cleanupError) {
-      console.error('Error cleaning up temp files:', cleanupError);
-    }
-
-    return segments;
-  } catch (error) {
-    console.error('Error in transcript processing:', error);
-    // Clean up any files that might have been created
-    try {
-      if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-      if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-    } catch (cleanupError) {
-      console.error('Error cleaning up after failure:', cleanupError);
-    }
-    throw error;
-  }
-}
-
-/**
- * Download YouTube video using Python's yt-dlp (must be installed on server)
- */
-async function downloadVideo(
-  videoId: string,
-  outputPath: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const ytDlp = spawn('yt-dlp', [
-      `https://www.youtube.com/watch?v=${videoId}`,
-      '-f',
-      'bestaudio[ext=m4a]/bestaudio',
-      '-o',
-      outputPath,
-    ]);
-
-    let errorOutput = '';
-
-    ytDlp.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    ytDlp.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`yt-dlp exited with code ${code}: ${errorOutput}`));
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-/**
- * Extract audio from video using ffmpeg (must be installed on server)
- */
-async function extractAudio(
-  videoPath: string,
-  audioPath: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
-      '-i',
-      videoPath,
-      '-q:a',
-      '0',
-      '-map',
-      'a',
-      '-f',
-      'mp3',
-      audioPath,
-    ]);
-
-    let errorOutput = '';
-
-    ffmpeg.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    ffmpeg.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`ffmpeg exited with code ${code}: ${errorOutput}`));
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-/**
- * Transcribe audio file with OpenAI Whisper API
- */
-async function transcribeAudio(audioPath: string): Promise<any[]> {
-  const formData = new FormData();
-  formData.append('file', new Blob([fs.readFileSync(audioPath)]), 'audio.mp3');
-  formData.append('model', 'whisper-1');
-  formData.append('response_format', 'verbose_json');
-  formData.append('timestamp_granularities[]', 'segment');
-
-  const response = await fetch(
-    'https://api.openai.com/v1/audio/transcriptions',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Whisper API error: ${response.status} ${errorText}`);
-  }
-
-  const result = (await response.json()) as WhisperResponse;
-
-  // Process segments with precise timestamps
-  const segments =
-    result.segments?.map((segment: WhisperSegment) => ({
-      text: segment.text,
-      start: segment.start || 0,
-      end: segment.end || 0,
-    })) || [];
-
-  return segments;
 }
 
 /**
@@ -290,7 +109,7 @@ export async function generateSocialContent(
   contentType: 'twitter' | 'thread' | 'summary',
   transcript: any[]
 ): Promise<string> {
-  // Format transcript from Whisper for AI
+  // Format transcript for AI
   const formattedTranscript = transcript
     .map((segment) => segment.text)
     .join(' ');
@@ -316,7 +135,7 @@ export async function generateSocialContent(
         },
         {
           role: 'user',
-          content: `Here's a transcript from a YouTube video transcribed with Whisper:\n\n${formattedTranscript}\n\n${prompts[contentType]}`,
+          content: `Here's a transcript from a YouTube video:\n\n${formattedTranscript}\n\n${prompts[contentType]}`,
         },
       ],
       temperature: 0.7,

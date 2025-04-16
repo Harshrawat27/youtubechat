@@ -3,25 +3,27 @@
 import { useState, useRef, useEffect } from 'react';
 import { Message, MessageType } from '@/lib/types';
 import { formatTimestamp } from '@/lib/utils';
-import { Send } from 'lucide-react';
+import { Send, Twitter, Copy, FileText } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 
 interface ChatInterfaceProps {
-  videoId: string;
+  videoId?: string;
 }
 
 export default function ChatInterface({ videoId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content:
-        'I\'m your AI assistant for this video. Ask me questions about the content, like "Where do they talk about X?" or "Summarize the part about Y."',
+      content: videoId
+        ? 'I\'m your AI assistant for this video. Ask me questions about the content, like "Where do they talk about X?" or "Summarize the part about Y."'
+        : 'How can I help you today? You can ask me general questions or request me to create social media content.',
       type: MessageType.ASSISTANT,
       timestamp: new Date(),
     },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [socialMode, setSocialMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,6 +33,11 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    // Could add toast notification here
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +63,8 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
         body: JSON.stringify({
           videoId,
           message: inputValue,
+          // Social mode for content creation requests
+          mode: socialMode ? 'social' : 'normal',
         }),
       });
 
@@ -71,9 +80,16 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
         type: MessageType.ASSISTANT,
         timestamp: new Date(),
         timestamps: data.timestamps || [],
+        // Add flag for social content to enable copy button
+        isSocialContent: socialMode,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Reset social mode after response
+      if (socialMode) {
+        setSocialMode(false);
+      }
     } catch (error) {
       console.error('Error getting chat response:', error);
 
@@ -90,10 +106,33 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
     }
   };
 
+  // Detect social media content requests
+  useEffect(() => {
+    const socialKeywords = [
+      'twitter post',
+      'create a thread',
+      'twitter thread',
+      'social media post',
+    ];
+    const isSocialRequest = socialKeywords.some((keyword) =>
+      inputValue.toLowerCase().includes(keyword)
+    );
+
+    setSocialMode(isSocialRequest);
+  }, [inputValue]);
+
   return (
     <div className='flex flex-col h-screen'>
       <div className='p-4 bg-dark-400 border-b border-dark-300'>
-        <h2 className='text-xl font-semibold'>Video Chat</h2>
+        <h2 className='text-xl font-semibold'>
+          {videoId ? 'Video Chat' : 'Chat Assistant'}
+        </h2>
+        {socialMode && (
+          <div className='mt-2 flex items-center gap-2 text-primary-300 text-sm'>
+            <Twitter size={14} />
+            <span>Social content creation mode</span>
+          </div>
+        )}
       </div>
 
       <div className='flex-1 overflow-y-auto p-4 space-y-4'>
@@ -109,6 +148,11 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
                 (window as any).seekToVideoTime(seconds);
               }
             }}
+            onCopy={
+              message.isSocialContent
+                ? () => copyToClipboard(message.content)
+                : undefined
+            }
           />
         ))}
         {isLoading && (
@@ -139,7 +183,11 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
             type='text'
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder='Ask about the video content...'
+            placeholder={
+              videoId
+                ? 'Ask about the video content...'
+                : 'Ask a question or request social media content...'
+            }
             className='input-primary flex-grow py-3'
             disabled={isLoading}
           />
@@ -151,6 +199,31 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
             <Send size={20} />
           </button>
         </form>
+
+        {videoId && (
+          <div className='mt-3 flex gap-2'>
+            <button
+              className='text-xs text-primary-300 hover:text-primary-200 flex items-center gap-1'
+              onClick={() =>
+                setInputValue('Create a Twitter post summarizing this video')
+              }
+            >
+              <Twitter size={12} />
+              <span>Twitter Post</span>
+            </button>
+            <button
+              className='text-xs text-primary-300 hover:text-primary-200 flex items-center gap-1'
+              onClick={() =>
+                setInputValue(
+                  'Create a Twitter thread breaking down this video'
+                )
+              }
+            >
+              <FileText size={12} />
+              <span>Twitter Thread</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

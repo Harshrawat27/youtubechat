@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import {
-  getAccurateTranscript,
   processQuery,
   processGeneralQuery,
   generateSocialContent,
 } from '@/lib/ai';
+import { getTranscript } from '@/lib/transcription';
 
 export async function POST(request: Request) {
   try {
@@ -24,11 +24,18 @@ export async function POST(request: Request) {
     }
 
     try {
+      // Use the cached transcript or get it if it's already been transcribed
+      const transcript = await getTranscript(videoId);
+
+      if (!transcript || transcript.length === 0) {
+        return NextResponse.json({
+          text: "I couldn't transcribe this video. This might be due to the video length or format. Please try a different video.",
+          timestamps: [],
+        });
+      }
+
       // Handle social media content generation
       if (mode === 'social') {
-        // First get transcript with Whisper
-        const transcript = await getAccurateTranscript(videoId);
-
         const contentType = message.toLowerCase().includes('thread')
           ? 'thread'
           : message.toLowerCase().includes('twitter') ||
@@ -41,17 +48,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ text: content, timestamps: [] });
       }
 
-      // Get accurate transcript using Whisper
-      const transcript = await getAccurateTranscript(videoId);
-
-      if (!transcript || transcript.length === 0) {
-        return NextResponse.json({
-          text: "I couldn't transcribe this video. This might be due to the video length or format. Please try a different video.",
-          timestamps: [],
-        });
-      }
-
-      // Process query using OpenAI
+      // Process query using the transcript and OpenAI
       const result = await processQuery(message, transcript);
 
       return NextResponse.json(result);
