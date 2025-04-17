@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import VideoPlayer from '@/components/VideoPlayer';
 import ChatInterface from '@/components/ChatInterface';
@@ -22,6 +22,9 @@ type TranscriptionStatus = 'not_started' | 'in_progress' | 'completed';
 
 export default function ChatPage() {
   const { videoId } = useParams() as { videoId: string };
+  const searchParams = useSearchParams();
+  const chatId = searchParams.get('chatId');
+
   const [videoDetails, setVideoDetails] = useState<VideoDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [transcriptionStatus, setTranscriptionStatus] =
@@ -39,9 +42,12 @@ export default function ChatPage() {
   // Redirect if not authenticated
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/auth/signin?callbackUrl=' + encodeURI(`/chat/${videoId}`));
+      const callbackUrl = `/chat/${videoId}${
+        chatId ? `?chatId=${chatId}` : ''
+      }`;
+      router.push('/auth/signin?callbackUrl=' + encodeURI(callbackUrl));
     }
-  }, [status, router, videoId]);
+  }, [status, router, videoId, chatId]);
 
   // Check if user has reached their limit
   useEffect(() => {
@@ -243,7 +249,7 @@ export default function ChatPage() {
         </div>
         <div className='md:w-1/2 border-l border-dark-300'>
           {transcriptionStatus === 'completed' ? (
-            <ChatInterface videoId={videoId} />
+            <ChatInterface videoId={videoId} chatId={chatId} />
           ) : (
             <div className='flex items-center justify-center h-full p-6'>
               <TranscriptionLoader progress={transcriptionProgress} />

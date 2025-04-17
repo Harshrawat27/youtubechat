@@ -5,30 +5,88 @@ import { Message, MessageType } from '@/lib/types';
 import { formatTimestamp } from '@/lib/utils';
 import { Send, Twitter, Copy, FileText } from 'lucide-react';
 import ChatMessage from './ChatMessage';
+import { FadeLoader } from '@/components/ui/Loader';
 
 interface ChatInterfaceProps {
   videoId?: string;
+  chatId?: string | null;
 }
 
-export default function ChatInterface({ videoId }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: videoId
-        ? 'I\'m your AI assistant for this video. Ask me questions about the content, like "Where do they talk about X?" or "Summarize the part about Y."'
-        : 'How can I help you today? You can ask me general questions or request me to create social media content.',
-      type: MessageType.ASSISTANT,
-      timestamp: new Date(),
-    },
-  ]);
+export default function ChatInterface({
+  videoId,
+  chatId: initialChatId,
+}: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [socialMode, setSocialMode] = useState(false);
+  const [chatId, setChatId] = useState<string | null>(initialChatId || null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Load previous messages when component mounts
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        // Construct the URL with appropriate parameters
+        const url = new URL('/api/chat', window.location.origin);
+        if (chatId) {
+          url.searchParams.append('chatId', chatId);
+        } else if (videoId) {
+          url.searchParams.append('videoId', videoId);
+        }
+
+        const response = await fetch(url.toString());
+        const data = await response.json();
+
+        if (data.messages && data.messages.length > 0) {
+          // Format the loaded messages
+          const formattedMessages = data.messages.map((msg: any) => ({
+            id: msg.id,
+            content: msg.content,
+            type: msg.type as MessageType,
+            timestamp: new Date(msg.timestamp),
+            timestamps: msg.timestamps || [],
+            isSocialContent: msg.type === 'assistant' && socialMode,
+          }));
+
+          setMessages(formattedMessages);
+          setChatId(data.chatId);
+        } else {
+          // If no previous messages, set a welcome message
+          setMessages([
+            {
+              id: '1',
+              content: videoId
+                ? 'I\'m your AI assistant for this video. Ask me questions about the content, like "Where do they talk about X?" or "Summarize the part about Y."'
+                : 'How can I help you today? You can ask me general questions or request me to create social media content.',
+              type: MessageType.ASSISTANT,
+              timestamp: new Date(),
+            },
+          ]);
+        }
+      } catch (error) {
+        console.error('Error loading previous messages:', error);
+        // Set a fallback welcome message in case of error
+        setMessages([
+          {
+            id: '1',
+            content: 'How can I help you today?',
+            type: MessageType.ASSISTANT,
+            timestamp: new Date(),
+          },
+        ]);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    loadMessages();
+  }, [videoId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -65,6 +123,8 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
           message: inputValue,
           // Social mode for content creation requests
           mode: socialMode ? 'social' : 'normal',
+          // Include chatId if we have one to continue the conversation
+          chatId: chatId,
         }),
       });
 
@@ -73,6 +133,11 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
       }
 
       const data = await response.json();
+
+      // Set/update the chat ID if returned from the API
+      if (data.chatId) {
+        setChatId(data.chatId);
+      }
 
       const assistantMessage: Message = {
         id: Date.now().toString() + '-response',
@@ -120,6 +185,19 @@ export default function ChatInterface({ videoId }: ChatInterfaceProps) {
 
     setSocialMode(isSocialRequest);
   }, [inputValue]);
+
+  if (initialLoading) {
+    return (
+      <div className='flex flex-col h-screen'>
+        <div className='flex-1 flex items-center justify-center'>
+          <div className='text-center'>
+            <FadeLoader color='#8975EA' />
+            <p className='mt-4 text-gray-400'>Loading conversation...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='flex flex-col h-screen'>
