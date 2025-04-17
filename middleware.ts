@@ -16,7 +16,8 @@ export async function middleware(request: NextRequest) {
     '/auth/verify-request',
     '/auth/error',
     '/api/auth',
-    '/pricing', // Next-auth API routes should remain accessible
+    '/pricing',
+    '/api/test-db', // Next-auth API routes should remain accessible
   ];
 
   // Extract the pathname from the request URL

@@ -62,19 +62,13 @@ export default function SignUp() {
         'Account created! Please check your email to verify your account.'
       );
 
-      // Sign in with email provider to trigger verification email
-      await signIn('email', {
-        email,
-        redirect: false,
-      });
-
-      // Redirect to verify-request page after a short delay
+      // Redirect to verify-request page instead of triggering email sign-in
       setTimeout(() => {
         router.push('/auth/verify-request');
       }, 2000);
     } catch (error: any) {
-      setError(error.message || 'An error occurred during registration');
       console.error('Registration error:', error);
+      setError(error.message || 'An error occurred during registration');
     } finally {
       setLoading(false);
     }
