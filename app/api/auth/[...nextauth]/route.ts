@@ -27,26 +27,26 @@ export const authOptions: NextAuthOptions = {
       },
       from: process.env.EMAIL_FROM,
       //   // Optional: Customize email template
-      //   sendVerificationRequest: async ({
-      //     identifier: email,
-      //     url,
-      //     provider: { server, from },
-      //   }) => {
-      //     // Custom email sending logic using nodemailer
-      //     const { createTransport } = await import("nodemailer");
-      //     const transport = createTransport(server);
-      //     const result = await transport.sendMail({
-      //       to: email,
-      //       from,
-      //       subject: "Sign in to your account",
-      //       text: `Please click this link to sign in: ${url}`,
-      //       html: `<p>Please click this link to sign in:</p><p><a href="${url}">Sign in</a></p>`,
-      //     });
-      //     const failed = result.rejected.concat(result.pending).filter(Boolean);
-      //     if (failed.length) {
-      //       throw new Error(`Email(s) (${failed.join(", ")}) could not be sent`);
-      //     }
-      //   },
+      sendVerificationRequest: async ({
+        identifier: email,
+        url,
+        provider: { server, from },
+      }) => {
+        // Custom email sending logic using nodemailer
+        const { createTransport } = await import('nodemailer');
+        const transport = createTransport(server);
+        const result = await transport.sendMail({
+          to: email,
+          from,
+          subject: 'Sign in to your account',
+          text: `Please click this link to sign in: ${url}`,
+          html: `<p>Please click this link to sign in:</p><p><a href="${url}">Sign in</a></p>`,
+        });
+        const failed = result.rejected.concat(result.pending).filter(Boolean);
+        if (failed.length) {
+          throw new Error(`Email(s) (${failed.join(', ')}) could not be sent`);
+        }
+      },
     }),
     CredentialsProvider({
       name: 'credentials',
@@ -112,18 +112,25 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    // In app/api/auth/[...nextauth]/route.ts
     async signIn({ user, account }) {
       // If the user signs in with Google, we need to check if they have verified their email
       if (account?.provider === 'google' && user.email) {
-        // Check if the user already exists
-        const existingUser = await prisma.user.findUnique({
-          where: {
-            email: user.email,
-          },
-        });
+        try {
+          // Check if the user already exists
+          const existingUser = await prisma.user.findUnique({
+            where: {
+              email: user.email,
+            },
+          });
 
-        // If they don't exist, set emailVerified to the current date because Google accounts are already verified
-        if (!existingUser) {
+          // If they don't exist yet, NextAuth will create them automatically
+          // We don't need to update here, just return true
+          if (!existingUser) {
+            return true;
+          }
+
+          // If they do exist, we can update them if needed
           await prisma.user.update({
             where: { id: user.id },
             data: {
@@ -131,19 +138,15 @@ export const authOptions: NextAuthOptions = {
               subscriptionPlan: 'FREE',
             },
           });
+
+          return true;
+        } catch (error) {
+          console.error('Error in signIn callback:', error);
+          return true; // Allow sign in despite errors
         }
-        return true;
       }
 
-      // For email/password login, we need to check if the email is verified
-      if (account?.provider === 'credentials') {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email as string },
-        });
-
-        return !!dbUser?.emailVerified;
-      }
-
+      // For other providers
       return true;
     },
   },
