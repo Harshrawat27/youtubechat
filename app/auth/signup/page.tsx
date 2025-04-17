@@ -39,7 +39,7 @@ export default function SignUp() {
 
     try {
       // Call your API to register the user
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/registration', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
